@@ -62,7 +62,7 @@ const Login = ({ onLogin }) => {
         padding: '1.5rem',
         textAlign: 'center',
         fontSize: '0.875rem',
-        color: 'var(--primary-color)'
+        color: '#e2e8f0'
       }}>
         <p style={{ margin: 0 }}>&copy; {new Date().getFullYear()} ClassTrack Attendance System. Designed & Powered by TSNP Computing & Informatics Department.</p>
       </footer>
