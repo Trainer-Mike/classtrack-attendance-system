@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../App';
-import { Users, FileText, Send, Download, Calendar, Layers } from 'lucide-react';
+import { Users, FileText, Send, Download, Calendar, Layers, FileOutput } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const HodDashboard = ({ user }) => {
   const [stats, setStats] = useState([]);
@@ -74,6 +76,65 @@ const HodDashboard = ({ user }) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDownloadPDF = () => {
+    if (stats.length === 0) {
+        setMessage('No data to download.');
+        setTimeout(() => setMessage(''), 3000);
+        return;
+    }
+
+    const doc = new jsPDF('landscape'); // Landscape gives more room for the table
+    
+    // Header Text
+    doc.setFontSize(16);
+    doc.setTextColor(11, 31, 59); // Matches the new dark theme
+    doc.text(`ClassTrack Department Attendance Report — ${filter.toUpperCase()}`, 14, 20);
+    
+    const totalExpected = stats.reduce((sum, s) => sum + s.total_lessons, 0);
+    const totalAttended = stats.reduce((sum, s) => sum + s.attended_lessons, 0);
+    const totalMissed   = stats.reduce((sum, s) => sum + s.missed_lessons, 0);
+    const totalMakeup   = stats.reduce((sum, s) => sum + s.makeup_lessons, 0);
+    const overallPct    = totalExpected > 0 ? ((totalAttended / totalExpected) * 100).toFixed(1) : 0;
+
+    doc.setFontSize(11);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Overall Attendance: ${overallPct}%   |   Expected: ${totalExpected}   |   Attended: ${totalAttended}   |   Missed: ${totalMissed}   |   Makeup: ${totalMakeup}`, 14, 28);
+    
+    const tableColumn = ["Trainer", "Subject", `Expected (${filter})`, "Attended", "Missed", "Makeup", "Attend %", "Remarks"];
+    const tableRows = [];
+
+    stats.forEach(s => {
+      tableRows.push([
+        s.trainer_name,
+        s.subject_name,
+        s.total_lessons,
+        s.attended_lessons,
+        s.missed_lessons,
+        s.makeup_lessons,
+        `${s.percentage}%`,
+        s.remarks
+      ]);
+    });
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 35,
+      theme: 'grid',
+      headStyles: { fillColor: [0, 128, 0], textColor: [255, 255, 255] }, // matches var(--primary-color)
+      styles: { fontSize: 9, cellPadding: 3 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      didDrawPage: function (data) {
+        // Footer text
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Generated on ${new Date().toLocaleDateString()} via ClassTrack Attendance System`, data.settings.margin.left, doc.internal.pageSize.height - 10);
+      }
+    });
+
+    doc.save(`department_attendance_${filter}_report.pdf`);
   };
 
   // --- Computed department-wide aggregates ---
@@ -201,9 +262,14 @@ const HodDashboard = ({ user }) => {
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
           <h2 className="card-title" style={{ margin: 0, textTransform: 'capitalize' }}>Trainer-Level Breakdown — {filter === 'week' ? 'This Week' : 'This Term'}</h2>
-          <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 'auto' }} onClick={handleDownloadReport}>
-              <Download size={16} /> Download {filter === 'week' ? 'Weekly' : 'Termly'} Report
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 'auto', border: '1px solid var(--primary-color)', color: 'var(--primary-color)' }} onClick={handleDownloadReport}>
+                <Download size={16} /> CSV
+            </button>
+            <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 'auto' }} onClick={handleDownloadPDF}>
+                <FileOutput size={16} /> PDF Report
+            </button>
+          </div>
         </div>
         
         <div className="table-container" style={{ margin: 0, border: 'none', boxShadow: 'none' }}>

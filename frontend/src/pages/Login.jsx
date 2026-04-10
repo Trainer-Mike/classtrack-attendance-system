@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { API_URL } from '../App';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Eye, EyeOff } from 'lucide-react';
 
 const Login = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
@@ -40,16 +41,37 @@ const Login = ({ onLogin }) => {
               required 
             />
           </div>
-          <div className="form-group">
+          <div className="form-group" style={{ position: 'relative' }}>
             <label>Password</label>
             <input 
-              type="password" 
+              type={showPassword ? 'text' : 'password'} 
               className="form-control" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required 
+              style={{ paddingRight: '2.5rem' }}
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={{
+                position: 'absolute',
+                right: '0.75rem',
+                top: '2.25rem',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0
+              }}
+              title={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
           </div>
           <button type="submit" className="btn btn-primary">Sign In</button>
         </form>
