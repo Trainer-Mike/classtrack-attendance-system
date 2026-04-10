@@ -39,7 +39,7 @@ const DpDashboard = ({ user }) => {
       setIsApproved(true);
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      setMessage('Failed to approve report.');
+      setMessage(`Failed: ${err.response?.data?.error || err.message}`);
     }
   };
 

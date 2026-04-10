@@ -288,21 +288,21 @@ app.get('/api/reports', authenticate, (req, res) => {
   });
 });
 
-// DP Approve
-app.patch('/api/reports/:id/approve', authenticate, (req, res) => {
-  const sql = "UPDATE reports SET status = 'approved' WHERE id = ?";
-  db.run(sql, [req.params.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Report approved' });
-  });
-});
-
 // Bulk Approve all reports
 app.patch('/api/reports/approve-all', authenticate, (req, res) => {
   const sql = "UPDATE reports SET status = 'approved'";
   db.run(sql, [], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'All reports approved' });
+  });
+});
+
+// DP Approve
+app.patch('/api/reports/:id/approve', authenticate, (req, res) => {
+  const sql = "UPDATE reports SET status = 'approved' WHERE id = ?";
+  db.run(sql, [req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Report approved' });
   });
 });
 
