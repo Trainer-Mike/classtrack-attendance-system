@@ -297,5 +297,14 @@ app.patch('/api/reports/:id/approve', authenticate, (req, res) => {
   });
 });
 
+// Bulk Approve all reports
+app.patch('/api/reports/approve-all', authenticate, (req, res) => {
+  const sql = "UPDATE reports SET status = 'approved'";
+  db.run(sql, [], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'All reports approved' });
+  });
+});
+
 const PORT = 5000;
 app.listen(PORT, () => console.log(`Backend is running on http://localhost:${PORT}`));

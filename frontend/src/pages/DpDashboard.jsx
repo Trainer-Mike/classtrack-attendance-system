@@ -1,30 +1,26 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../App';
-import { ShieldCheck, Inbox, FileOutput, Calendar, Layers, Users, FileText } from 'lucide-react';
+import { ShieldCheck, Calendar, Layers, FileOutput, Check } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const DpDashboard = ({ user }) => {
-  const [reports, setReports] = useState([]);
   const [message, setMessage] = useState('');
   
   // Department Analysis States (copied from HOD)
   const [stats, setStats] = useState([]);
   const [filter, setFilter] = useState('week'); // 'week' or 'term'
   const [selectedWeek, setSelectedWeek] = useState('');
-  const [activeTab, setActiveTab] = useState('approvals'); // 'approvals' or 'analysis'
   const [term, setTerm] = useState('1');
+  const [isApproved, setIsApproved] = useState(false);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
   useEffect(() => {
-    fetchReports();
-  }, []);
-
-  useEffect(() => {
     fetchStats();
+    setIsApproved(false); // Reset approval if filter changes
   }, [filter, selectedWeek]);
 
   const fetchStats = async () => {
@@ -36,21 +32,12 @@ const DpDashboard = ({ user }) => {
     }
   };
 
-  const fetchReports = async () => {
+  const handleApproveAll = async () => {
     try {
-      const res = await axios.get(`${API_URL}/reports`, { headers });
-      setReports(res.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleApprove = async (id) => {
-    try {
-      await axios.patch(`${API_URL}/reports/${id}/approve`, {}, { headers });
-      setMessage('Report approved successfully.');
+      await axios.patch(`${API_URL}/reports/approve-all`, {}, { headers });
+      setMessage('Department report officially approved.');
+      setIsApproved(true);
       setTimeout(() => setMessage(''), 3000);
-      fetchReports();
     } catch (err) {
       setMessage('Failed to approve report.');
     }
@@ -128,120 +115,14 @@ const DpDashboard = ({ user }) => {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
-        <button 
-          className={`btn ${activeTab === 'approvals' ? 'btn-primary' : 'btn-outline'}`}
-          onClick={() => setActiveTab('approvals')}
-          style={{ width: 'auto' }}
-        >
-          Forwarded Reports
-        </button>
-        <button 
-          className={`btn ${activeTab === 'analysis' ? 'btn-primary' : 'btn-outline'}`}
-          onClick={() => setActiveTab('analysis')}
-          style={{ width: 'auto' }}
-        >
-          View Department Analytics
-        </button>
-      </div>
-
-      {activeTab === 'approvals' && (
-      <>
-      <div className="grid-cards">
-        <div className="card">
-          <div className="card-icon" style={{ backgroundColor: '#fee2e2', color: '#dc2626' }}>
-            <Inbox size={20} />
-          </div>
-          <div className="card-title">Pending Approvals</div>
-          <div className="card-value">{reports.filter(r => r.status === 'forwarded_to_dp').length}</div>
-        </div>
-        <div className="card">
-          <div className="card-icon" style={{ backgroundColor: '#d1fae5', color: '#059669' }}>
-            <ShieldCheck size={20} />
-          </div>
-          <div className="card-title">Approved Reports</div>
-          <div className="card-value">{reports.filter(r => r.status === 'approved').length}</div>
-        </div>
-      </div>
-
       {message && (
         <div style={{ padding: '1rem', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '8px', marginBottom: '1rem' }}>
           {message}
         </div>
       )}
 
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
-          <h2 className="card-title" style={{ margin: 0 }}>Forwarded Reports</h2>
-        </div>
-        
-        <div className="table-container" style={{ margin: 0, border: 'none', boxShadow: 'none' }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Report ID</th>
-                <th>Trainer ID</th>
-                <th>Subject ID</th>
-                <th>Remarks</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reports.map((row) => (
-                <tr key={row.id}>
-                  <td>#{row.id}</td>
-                  <td style={{ fontWeight: 600 }}>{row.trainer_name || `ID: ${row.trainer_id}`}</td>
-                  <td>{row.subject_name || `ID: ${row.subject_id}`}</td>
-                  <td>
-                    <span className={`badge ${row.remarks && row.remarks.toLowerCase().includes('excellent') ? 'badge-success' : 'badge-warning'}`}>
-                      {row.remarks}
-                    </span>
-                  </td>
-                  <td>
-                    {row.status === 'approved' ? (
-                      <span className="badge badge-success">Approved</span>
-                    ) : (
-                      <span className="badge" style={{ backgroundColor: '#e2e8f0', color: '#475569' }}>Pending</span>
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      {row.status !== 'approved' && (
-                        <button 
-                          onClick={() => handleApprove(row.id)}
-                          className="btn btn-primary" 
-                          style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
-                        >
-                          Approve
-                        </button>
-                      )}
-                      {row.status === 'approved' && (
-                        <button 
-                          onClick={() => handleDownloadPDF(row)}
-                          className="btn btn-outline" 
-                          style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.25rem', borderColor: '#10b981', color: '#10b981' }}
-                        >
-                          <FileOutput size={14} /> PDF
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {reports.length === 0 && (
-                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>No pending reports.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      </>
-      )}
-
-      {activeTab === 'analysis' && (
-      <>
-        {/* DP Department Analysis View */}
+      {/* DP Department Analysis View */}
+      <h2 style={{ marginBottom: '1.5rem', color: '#1e293b' }}>Department Analytics</h2>
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', justifyContent: 'flex-start', alignItems: 'center', flexWrap: 'wrap' }}>
             <button 
                 className={`btn ${filter === 'week' ? 'btn-primary' : 'btn-outline'}`} 
@@ -284,9 +165,17 @@ const DpDashboard = ({ user }) => {
                 <option value="2">Term 2</option>
                 <option value="3">Term 3</option>
               </select>
-              <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 'auto' }} onClick={handleDownloadOverviewPDF}>
-                  <FileOutput size={16} /> Download Approved PDF
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {!isApproved ? (
+                   <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 'auto' }} onClick={handleApproveAll}>
+                      <Check size={16} /> Approve Department Report
+                   </button>
+                ) : (
+                   <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: 'auto', borderColor: '#10b981', color: '#10b981' }} onClick={handleDownloadOverviewPDF}>
+                      <FileOutput size={16} /> Download Approved PDF
+                   </button>
+                )}
+              </div>
             </div>
         </div>
 
@@ -338,8 +227,6 @@ const DpDashboard = ({ user }) => {
             </table>
           </div>
         </div>
-      </>
-      )}
     </div>
   );
 };
