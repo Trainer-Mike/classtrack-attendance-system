@@ -73,21 +73,29 @@ app.get('/api/data/all-subjects', authenticate, (req, res) => {
   });
 });
 
+// Get Current Active Week
+app.get('/api/attendance/current-week', authenticate, (req, res) => {
+  db.get("SELECT MAX(week_number) as max_week FROM attendance_records", [], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ current_week: row.max_week || 1 });
+  });
+});
+
 // Student Log Attendance
 app.post('/api/attendance', authenticate, (req, res) => {
-  const { trainer_id, subject_id, attended, make_up_done, time_taught, makeup_time, remarks } = req.body;
+  const { trainer_id, subject_id, date, week_number, attended, make_up_done, time_taught, makeup_time, remarks } = req.body;
   const student_id = req.user.id;
   
-  const checkSql = `SELECT id FROM attendance_records WHERE trainer_id = ? AND subject_id = ? AND time_taught = ? AND date(timestamp) = date('now')`;
+  const checkSql = `SELECT id FROM attendance_records WHERE trainer_id = ? AND subject_id = ? AND time_taught = ? AND date = ?`;
 
-  db.get(checkSql, [trainer_id, subject_id, time_taught], (err, row) => {
+  db.get(checkSql, [trainer_id, subject_id, time_taught, date], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (row) {
-      return res.status(400).json({ error: 'A record for this specific unit, trainer, and time slot has already been logged today! Duplicate entries are strictly prohibited.' });
+      return res.status(400).json({ error: 'A record for this specific unit, trainer, and time slot has already been logged on this date! Duplicate entries are strictly prohibited.' });
     }
 
-    const sql = 'INSERT INTO attendance_records (student_id, trainer_id, subject_id, attended, make_up_done, time_taught, makeup_time, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-    db.run(sql, [student_id, trainer_id, subject_id, attended ? 1 : 0, make_up_done ? 1 : 0, time_taught, makeup_time, remarks], function(err) {
+    const sql = 'INSERT INTO attendance_records (student_id, trainer_id, subject_id, date, week_number, attended, make_up_done, time_taught, makeup_time, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    db.run(sql, [student_id, trainer_id, subject_id, date, week_number, attended ? 1 : 0, make_up_done ? 1 : 0, time_taught, makeup_time, remarks], function(err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ id: this.lastID, message: 'Attendance recorded successfully' });
     });
@@ -199,14 +207,18 @@ app.post('/api/admin/reset-week', authenticate, (req, res) => {
 
 // Trainer / HOD Analytics
 app.get('/api/attendance/stats', authenticate, (req, res) => {
-  const { filter } = req.query; // 'week' or 'term'
+  const { filter, week } = req.query; // filter='week' or 'term'
   const isTrainer = req.user.role === 'trainer';
   
   let conditions = [];
   if (isTrainer) conditions.push(`ar.trainer_id = ${req.user.id}`);
   
   if (filter === 'week') {
-    conditions.push(`ar.timestamp >= datetime('now', '-7 days')`);
+    if (week && week !== 'null' && week !== 'undefined') {
+      conditions.push(`ar.week_number = ${parseInt(week)}`);
+    } else {
+      conditions.push(`ar.timestamp >= datetime('now', '-7 days')`);
+    }
   }
 
   let whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : "";
@@ -216,6 +228,7 @@ app.get('/api/attendance/stats', authenticate, (req, res) => {
     SELECT 
       users.name as trainer_name,
       subjects.name as subject_name,
+      IFNULL(MAX(ar.week_number), 1) as max_week,
       (subjects.total_lessons_per_week * ${multiplier}) as total_lessons,
       COUNT(ar.id) as total_recorded,
       IFNULL(SUM(CASE WHEN ar.attended = 1 OR ar.attended = '1' OR ar.attended = 'true' THEN 1 ELSE 0 END), 0) as attended_lessons,
@@ -249,14 +262,13 @@ app.get('/api/attendance/stats', authenticate, (req, res) => {
 
 // HOD generates a report to forward to DP
 app.post('/api/reports', authenticate, (req, res) => {
-  // Mock report generation for now
-  const { trainer_id, subject_id, remarks, summary } = req.body;
+  const { trainer_id, subject_id, remarks, week_number, total_lessons, attended_lessons, missed_lessons, makeup_lessons, attendance_percentage } = req.body;
   const sql = `
     INSERT INTO reports 
-    (trainer_id, subject_id, remarks, status) 
-    VALUES (?, ?, ?, 'forwarded_to_dp')`;
+    (trainer_id, subject_id, week_number, report_date, total_lessons, attended_lessons, missed_lessons, makeup_lessons, attendance_percentage, remarks, status) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'forwarded_to_dp')`;
   
-  db.run(sql, [trainer_id, subject_id, remarks], function(err) {
+  db.run(sql, [trainer_id, subject_id, week_number || 1, new Date().toISOString().split('T')[0], total_lessons, attended_lessons, missed_lessons, makeup_lessons, attendance_percentage, remarks], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Report Forwarded successfully', id: this.lastID });
   });
@@ -264,7 +276,12 @@ app.post('/api/reports', authenticate, (req, res) => {
 
 // Fetch reports HOD/DP
 app.get('/api/reports', authenticate, (req, res) => {
-  const sql = 'SELECT * FROM reports';
+  const sql = `
+    SELECT r.*, u.name as trainer_name, s.name as subject_name 
+    FROM reports r
+    LEFT JOIN users u ON r.trainer_id = u.id
+    LEFT JOIN subjects s ON r.subject_id = s.id
+  `;
   db.all(sql, [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);

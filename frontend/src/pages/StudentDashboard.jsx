@@ -8,12 +8,30 @@ const StudentDashboard = () => {
   const [subjects, setSubjects] = useState([]);
   const [selectedTrainer, setSelectedTrainer] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
+  const [lessonDate, setLessonDate] = useState(new Date().toISOString().split('T')[0]);
+  const [weekNumber, setWeekNumber] = useState(1);
   const [timeTaught, setTimeTaught] = useState('');
   const [attended, setAttended] = useState(true);
   const [makeupDone, setMakeupDone] = useState(false);
   const [makeupTime, setMakeupTime] = useState('');
   const [remarks, setRemarks] = useState('');
   const [message, setMessage] = useState('');
+  const [minWeek, setMinWeek] = useState(1);
+
+  // Calculate current calendar week boundaries
+  const getStartOfWeek = () => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff)).toISOString().split('T')[0];
+  };
+
+  const getEndOfWeek = () => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1) + 6;
+    return new Date(d.setDate(diff)).toISOString().split('T')[0];
+  };
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -34,6 +52,12 @@ const StudentDashboard = () => {
     axios.get(`${API_URL}/data/all-subjects`, { headers }).then(res => {
       setSubjects(res.data);
     });
+    // Fetch active system week to prevent submitting past weeks
+    axios.get(`${API_URL}/attendance/current-week`, { headers }).then(res => {
+      const activeWeek = res.data.current_week || 1;
+      setMinWeek(activeWeek);
+      setWeekNumber(activeWeek);
+    }).catch(() => setMinWeek(1));
   }, []);
 
   const handleSubmit = async (e) => {
@@ -47,10 +71,15 @@ const StudentDashboard = () => {
       return;
     }
 
+    const confirmSubmit = window.confirm("Are you sure you want to submit this attendance record? Please verify the date and week number are correct.");
+    if (!confirmSubmit) return;
+
     try {
       await axios.post(`${API_URL}/attendance`, {
         trainer_id: selectedTrainer,
         subject_id: selectedSubject,
+        date: lessonDate,
+        week_number: parseInt(weekNumber),
         time_taught: timeTaught,
         attended,
         make_up_done: makeupDone,
@@ -62,6 +91,7 @@ const StudentDashboard = () => {
       // Reset form
       setSelectedTrainer('');
       setSelectedSubject('');
+      setLessonDate(new Date().toISOString().split('T')[0]);
       setTimeTaught('');
       setAttended(true);
       setMakeupDone(false);
@@ -123,6 +153,34 @@ const StudentDashboard = () => {
               <option value="">-- Choose a Unit --</option>
               {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+          </div>
+
+          {/* Date & Week */}
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+              <label>Lesson Date <span style={{fontSize:'0.75rem', fontWeight:'normal', color:'#64748b'}}>(Current Week Only)</span></label>
+              <input 
+                type="date" 
+                className="form-control" 
+                value={lessonDate} 
+                onChange={e => setLessonDate(e.target.value)} 
+                min={getStartOfWeek()}
+                max={getEndOfWeek()}
+                required 
+              />
+            </div>
+            <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+              <label>Week Number <span style={{fontSize:'0.75rem', fontWeight:'normal', color:'#64748b'}}>(Locked)</span></label>
+              <input 
+                type="number" 
+                className="form-control" 
+                min={minWeek} 
+                max={12} 
+                value={weekNumber} 
+                onChange={e => setWeekNumber(e.target.value)} 
+                required 
+              />
+            </div>
           </div>
 
           {/* Time Period — dropdown */}

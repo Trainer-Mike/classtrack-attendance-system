@@ -38,6 +38,8 @@ const db = new sqlite3.Database(dbPath, (err) => {
         student_id INTEGER,
         trainer_id INTEGER,
         subject_id INTEGER,
+        date TEXT,
+        week_number INTEGER,
         time_taught TEXT,
         attended BOOLEAN,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -55,6 +57,8 @@ const db = new sqlite3.Database(dbPath, (err) => {
         subject_id INTEGER,
         start_date TEXT,
         end_date TEXT,
+        week_number INTEGER,
+        report_date TEXT,
         total_lessons INTEGER,
         attended_lessons INTEGER,
         missed_lessons INTEGER,
@@ -63,6 +67,8 @@ const db = new sqlite3.Database(dbPath, (err) => {
         missed_percentage REAL,
         remarks TEXT,
         status TEXT DEFAULT 'pending',
+        approved_by INTEGER,
+        approved_at DATETIME,
         FOREIGN KEY (trainer_id) REFERENCES users(id),
         FOREIGN KEY (subject_id) REFERENCES subjects(id)
       )`, () => {

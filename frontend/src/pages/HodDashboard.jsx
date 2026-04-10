@@ -9,17 +9,18 @@ const HodDashboard = ({ user }) => {
   const [stats, setStats] = useState([]);
   const [message, setMessage] = useState('');
   const [filter, setFilter] = useState('week'); // 'week' or 'term'
+  const [selectedWeek, setSelectedWeek] = useState('');
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
   useEffect(() => {
     fetchStats();
-  }, [filter]);
+  }, [filter, selectedWeek]);
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get(`${API_URL}/attendance/stats?filter=${filter}`, { headers });
+      const res = await axios.get(`${API_URL}/attendance/stats?filter=${filter}&week=${selectedWeek}`, { headers });
       setStats(res.data);
     } catch (err) {
       console.error(err);
@@ -31,8 +32,13 @@ const HodDashboard = ({ user }) => {
       await axios.post(`${API_URL}/reports`, {
         trainer_id: row.trainer_id || row.id, 
         subject_id: row.subject_id, 
-        remarks: row.remarks, 
-        summary: `${row.percentage}% Attendance (${filter} view)`
+        week_number: row.max_week,
+        total_lessons: row.total_lessons,
+        attended_lessons: row.attended_lessons,
+        missed_lessons: row.missed_lessons,
+        makeup_lessons: row.makeup_lessons,
+        attendance_percentage: row.percentage,
+        remarks: row.remarks
       }, { headers });
       setMessage(`Report for ${row.trainer_name} forwarded to Deputy Principal.`);
       setTimeout(() => setMessage(''), 3000);
@@ -150,14 +156,29 @@ const HodDashboard = ({ user }) => {
   return (
     <div>
       {/* Filter Toggle */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', justifyContent: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', justifyContent: 'flex-start', alignItems: 'center' }}>
           <button 
               className={`btn ${filter === 'week' ? 'btn-primary' : 'btn-outline'}`} 
-              onClick={() => setFilter('week')}
+              onClick={() => { setFilter('week'); setSelectedWeek(''); }}
               style={{ width: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
               <Calendar size={16} /> Weekly Analysis
           </button>
+          
+          {filter === 'week' && (
+            <select 
+              className="form-control" 
+              style={{ width: 'auto', padding: '0.4rem 2rem 0.4rem 0.5rem', margin: 0 }}
+              value={selectedWeek}
+              onChange={(e) => setSelectedWeek(e.target.value)}
+            >
+              <option value="">Auto (Last 7 Days)</option>
+              {[...Array(12)].map((_, i) => (
+                <option key={i+1} value={i+1}>Week {i+1}</option>
+              ))}
+            </select>
+          )}
+
           <button 
               className={`btn ${filter === 'term' ? 'btn-primary' : 'btn-outline'}`} 
               onClick={() => setFilter('term')}
