@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { API_URL } from '../App';
-import { Settings, Users, BookA, RefreshCw, Edit, Trash2 } from 'lucide-react';
+import { Settings, Users, BookA, RefreshCw, Edit, Trash2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('users');
@@ -19,8 +19,32 @@ const AdminDashboard = () => {
     // Form inputs for user
     const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'trainer', class_name: '', active: true });
 
+    // Search and Pagination states
+    const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const usersPerPage = 10;
+
     const token = localStorage.getItem('token');
     const headers = { Authorization: `Bearer ${token}` };
+
+    useEffect(() => {
+        // Reset page if search changes
+        setCurrentPage(1);
+    }, [searchQuery]);
+
+    // Derived user lists for display
+    const filteredUsers = useMemo(() => {
+        const query = searchQuery.toLowerCase();
+        return users.filter((u) => 
+            u.name.toLowerCase().includes(query) ||
+            u.email.toLowerCase().includes(query) ||
+            u.role.toLowerCase().includes(query) ||
+            (u.class_name && u.class_name.toLowerCase().includes(query))
+        );
+    }, [users, searchQuery]);
+
+    const totalPages = Math.ceil(filteredUsers.length / usersPerPage) || 1;
+    const displayedUsers = filteredUsers.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage);
 
     useEffect(() => {
         if (activeTab === 'users') fetchUsers();
@@ -279,7 +303,23 @@ const AdminDashboard = () => {
                         </div>
                     </form>
 
-                    <h3>Existing Users</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <h3 style={{ margin: 0 }}>Existing Users</h3>
+                        <div style={{ position: 'relative', width: '300px', maxWidth: '100%' }}>
+                            <div style={{ position: 'absolute', top: '50%', left: '10px', transform: 'translateY(-50%)', color: '#64748b' }}>
+                                <Search size={16} />
+                            </div>
+                            <input 
+                                type="text" 
+                                className="form-control" 
+                                placeholder="Search by name, email, or role..." 
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                style={{ paddingLeft: '2.5rem', margin: 0 }}
+                            />
+                        </div>
+                    </div>
+                    
                     <div className="table-container">
                         <table>
                             <thead>
@@ -293,7 +333,7 @@ const AdminDashboard = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {users.map(u => (
+                                {displayedUsers.map(u => (
                                     <tr key={u.id}>
                                         <td>{u.name}</td>
                                         <td>{u.email}</td>
@@ -322,10 +362,34 @@ const AdminDashboard = () => {
                                         </td>
                                     </tr>
                                 ))}
-                                {users.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center' }}>No users found</td></tr>}
+                                {displayedUsers.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center' }}>No users found matching your search.</td></tr>}
                             </tbody>
                         </table>
                     </div>
+
+                    {totalPages > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1.5rem', marginBottom: '1rem' }}>
+                            <button 
+                                className="btn btn-outline" 
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage(p => p - 1)}
+                                style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', width: 'auto', opacity: currentPage === 1 ? 0.5 : 1 }}
+                            >
+                                <ChevronLeft size={16} /> Previous
+                            </button>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#475569' }}>
+                                Page {currentPage} of {totalPages}
+                            </span>
+                            <button 
+                                className="btn btn-outline" 
+                                disabled={currentPage === totalPages}
+                                onClick={() => setCurrentPage(p => p + 1)}
+                                style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', width: 'auto', opacity: currentPage === totalPages ? 0.5 : 1 }}
+                            >
+                                Next <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 

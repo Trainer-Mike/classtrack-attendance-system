@@ -9,7 +9,7 @@ import HodDashboard from './pages/HodDashboard';
 import DpDashboard from './pages/DpDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 
-export const API_URL = 'http://localhost:5000/api';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const MainLayout = ({ user, handleLogout, children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
