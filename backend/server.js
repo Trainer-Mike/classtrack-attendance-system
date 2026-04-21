@@ -127,11 +127,20 @@ app.post('/api/admin/users', authenticate, (req, res) => {
 // Update User (Admin)
 app.put('/api/admin/users/:id', authenticate, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-  const { name, email, role, class_name, active } = req.body;
-  db.run("UPDATE users SET name = ?, email = ?, role = ?, class_name = ?, active = ? WHERE id = ?", [name, email, role, class_name, active ? 1 : 0, req.params.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'User updated' });
-  });
+  const { name, email, role, class_name, active, password } = req.body;
+  
+  if (password && password.trim() !== '') {
+    const hash = bcrypt.hashSync(password, 10);
+    db.run("UPDATE users SET name = ?, email = ?, password = ?, role = ?, class_name = ?, active = ? WHERE id = ?", [name, email, hash, role, class_name, active ? 1 : 0, req.params.id], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'User updated (with password)' });
+    });
+  } else {
+    db.run("UPDATE users SET name = ?, email = ?, role = ?, class_name = ?, active = ? WHERE id = ?", [name, email, role, class_name, active ? 1 : 0, req.params.id], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'User updated' });
+    });
+  }
 });
 
 // Delete User (Admin)

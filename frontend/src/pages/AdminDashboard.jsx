@@ -273,7 +273,7 @@ const AdminDashboard = () => {
                         </div>
                         <div className="form-group">
                             <label>Password {editingUser && '(Leave blank to keep)'}</label>
-                            <input type="password" name="password" className="form-control" placeholder={editingUser ? '' : 'Default: password123'} value={formData.password} onChange={handleUserFormChange} />
+                            <input type="text" name="password" className="form-control" placeholder={editingUser ? '' : 'Default: password123'} value={formData.password} onChange={handleUserFormChange} />
                         </div>
                         <div className="form-group">
                             <label>Role</label>
