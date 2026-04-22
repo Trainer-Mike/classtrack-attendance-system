@@ -9,7 +9,7 @@ const TrainerDashboard = ({ user }) => {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    axios.get(`${API_URL}/attendance/stats`, {
+    axios.get(`${API_URL}/attendance/stats?filter=week`, {
       headers: { Authorization: `Bearer ${token}` }
     }).then(res => setStats(res.data));
   }, []);
