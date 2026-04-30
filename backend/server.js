@@ -66,9 +66,22 @@ app.get('/api/data/subjects/:trainerId', authenticate, (req, res) => {
   });
 });
 
-// Get ALL Subjects (For Class Rep)
+// Get ALL Subjects (For Class Rep) - filtered by the rep's class
 app.get('/api/data/all-subjects', authenticate, (req, res) => {
-  db.all("SELECT id, name FROM subjects", [], (err, rows) => {
+  const sql = `
+    SELECT s.id, s.name, s.total_lessons_per_week, s.class_id, c.name as class_name
+    FROM subjects s
+    LEFT JOIN classes c ON s.class_id = c.id
+  `;
+  db.all(sql, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// Get ALL Classes (For Selection)
+app.get('/api/data/classes', authenticate, (req, res) => {
+  db.all("SELECT id, name, term FROM classes", [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -155,16 +168,22 @@ app.delete('/api/admin/users/:id', authenticate, (req, res) => {
 // Manage Subjects (Admin)
 app.post('/api/admin/subjects', authenticate, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-  const { name, total_lessons_per_week } = req.body;
-  db.run("INSERT INTO subjects (name, total_lessons_per_week) VALUES (?, ?)", [name, total_lessons_per_week], function(err) {
+  const { name, total_lessons_per_week, class_id } = req.body;
+  db.run("INSERT INTO subjects (name, total_lessons_per_week, class_id) VALUES (?, ?, ?)", [name, total_lessons_per_week, class_id || null], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Subject created', id: this.lastID });
   });
 });
 
-// Get all subjects
+// Get all subjects (Admin) - includes class info
 app.get('/api/admin/subjects', authenticate, (req, res) => {
-  db.all("SELECT * FROM subjects", [], (err, rows) => {
+  const sql = `
+    SELECT s.*, c.name as class_name
+    FROM subjects s
+    LEFT JOIN classes c ON s.class_id = c.id
+    ORDER BY c.name, s.name
+  `;
+  db.all(sql, [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -173,9 +192,9 @@ app.get('/api/admin/subjects', authenticate, (req, res) => {
 // Update Subject (Admin)
 app.put('/api/admin/subjects/:id', authenticate, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-  const { name, total_lessons_per_week } = req.body;
-  db.run("UPDATE subjects SET name = ?, total_lessons_per_week = ? WHERE id = ?",
-    [name, total_lessons_per_week, req.params.id],
+  const { name, total_lessons_per_week, class_id } = req.body;
+  db.run("UPDATE subjects SET name = ?, total_lessons_per_week = ?, class_id = ? WHERE id = ?",
+    [name, total_lessons_per_week, class_id || null, req.params.id],
     function(err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ message: 'Subject updated' });
@@ -189,6 +208,42 @@ app.delete('/api/admin/subjects/:id', authenticate, (req, res) => {
   db.run("DELETE FROM subjects WHERE id = ?", [req.params.id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Subject deleted' });
+  });
+});
+
+
+// Manage Classes (Admin)
+app.get('/api/admin/classes', authenticate, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  db.all("SELECT * FROM classes", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/admin/classes', authenticate, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const { name, term } = req.body;
+  db.run("INSERT INTO classes (name, term) VALUES (?, ?)", [name, term], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Class created', id: this.lastID });
+  });
+});
+
+app.put('/api/admin/classes/:id', authenticate, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const { name, term } = req.body;
+  db.run("UPDATE classes SET name = ?, term = ? WHERE id = ?", [name, term, req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Class updated' });
+  });
+});
+
+app.delete('/api/admin/classes/:id', authenticate, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  db.run("DELETE FROM classes WHERE id = ?", [req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Class deleted' });
   });
 });
 
@@ -265,6 +320,54 @@ app.get('/api/attendance/stats', authenticate, (req, res) => {
       else if (percentage >= 70) remarks = 'Satisfactory';
 
       return { ...r, missed_lessons: calculatedMissed, percentage, remarks };
+    });
+    res.json(formatted);
+  });
+});
+
+// Class-level attendance stats (HOD / Admin)
+app.get('/api/attendance/class-stats', authenticate, (req, res) => {
+  const { filter, week } = req.query;
+  let conditions = [];
+  if (filter === 'week') {
+    if (week && week !== 'null' && week !== 'undefined') {
+      conditions.push(`ar.week_number = ${parseInt(week)}`);
+    } else {
+      conditions.push(`ar.timestamp >= datetime('now', '-7 days')`);
+    }
+  }
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const multiplier = filter === 'week' ? 1 : 12;
+
+  const sql = `
+    SELECT
+      c.id as class_id,
+      c.name as class_name,
+      c.term,
+      s.name as subject_name,
+      u.name as trainer_name,
+      (s.total_lessons_per_week * ${multiplier}) as total_lessons,
+      IFNULL(SUM(CASE WHEN ar.attended = 1 OR ar.attended = '1' THEN 1 ELSE 0 END), 0) as attended_lessons,
+      IFNULL(SUM(CASE WHEN ar.attended = 0 OR ar.attended = '0' THEN 1 ELSE 0 END), 0) as missed_lessons,
+      IFNULL(SUM(CASE WHEN ar.make_up_done = 1 OR ar.make_up_done = '1' THEN 1 ELSE 0 END), 0) as makeup_lessons
+    FROM attendance_records ar
+    JOIN subjects s ON ar.subject_id = s.id
+    JOIN classes c ON s.class_id = c.id
+    JOIN users u ON ar.trainer_id = u.id
+    ${whereClause}
+    GROUP BY c.id, s.id
+    ORDER BY c.name, s.name
+  `;
+
+  db.all(sql, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const formatted = rows.map(r => {
+      const percentage = (r.total_lessons > 0 ? (r.attended_lessons / r.total_lessons) * 100 : 0).toFixed(0);
+      let remarks = 'Needs Improvement';
+      if (percentage >= 90) remarks = 'Excellent';
+      else if (percentage >= 70) remarks = 'Satisfactory';
+      const missed = Math.max(0, r.total_lessons - r.attended_lessons);
+      return { ...r, missed_lessons: missed, percentage, remarks };
     });
     res.json(formatted);
   });

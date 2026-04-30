@@ -1,17 +1,20 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { API_URL } from '../App';
-import { Settings, Users, BookA, RefreshCw, Edit, Trash2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Settings, Users, BookA, RefreshCw, Edit, Trash2, Search, ChevronLeft, ChevronRight, School } from 'lucide-react';
 
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('users');
     const [users, setUsers] = useState([]);
     const [subjects, setSubjects] = useState([]);
+    const [classes, setClasses] = useState([]);
     const [message, setMessage] = useState('');
     const [messageType, setMessageType] = useState('success');
     const [editingUser, setEditingUser] = useState(null);
     const [editingSubject, setEditingSubject] = useState(null);
-    const [subjectForm, setSubjectForm] = useState({ name: '', total_lessons_per_week: '' });
+    const [editingClass, setEditingClass] = useState(null);
+    const [subjectForm, setSubjectForm] = useState({ name: '', total_lessons_per_week: '', class_id: '' });
+    const [classForm, setClassForm] = useState({ name: '', term: '' });
     
     // Modal state
     const [modal, setModal] = useState({ isOpen: false, title: '', message: '', action: null });
@@ -23,6 +26,14 @@ const AdminDashboard = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const usersPerPage = 10;
+
+    // Subjects pagination
+    const [subjectPage, setSubjectPage] = useState(1);
+    const subjectsPerPage = 10;
+
+    // Classes pagination
+    const [classPage, setClassPage] = useState(1);
+    const classesPerPage = 10;
 
     const token = localStorage.getItem('token');
     const headers = { Authorization: `Bearer ${token}` };
@@ -47,9 +58,12 @@ const AdminDashboard = () => {
     const displayedUsers = filteredUsers.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage);
 
     useEffect(() => {
-        if (activeTab === 'users') fetchUsers();
+        if (activeTab === 'users') { fetchUsers(); fetchClasses(); }
         if (activeTab === 'subjects') fetchSubjects();
+        if (activeTab === 'classes') fetchClasses();
     }, [activeTab]);
+
+    useEffect(() => { fetchClasses(); }, []);
 
     const fetchUsers = async () => {
         try {
@@ -67,6 +81,53 @@ const AdminDashboard = () => {
         } catch (err) {
             console.error(err);
         }
+    };
+
+    const fetchClasses = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/admin/classes`, { headers });
+            setClasses(res.data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleSaveClass = async (e) => {
+        e.preventDefault();
+        try {
+            if (editingClass) {
+                await axios.put(`${API_URL}/admin/classes/${editingClass.id}`, classForm, { headers });
+                showMessage('✅ Class updated successfully.');
+            } else {
+                await axios.post(`${API_URL}/admin/classes`, classForm, { headers });
+                showMessage('✅ Class created successfully.');
+            }
+            setEditingClass(null);
+            setClassForm({ name: '', term: '' });
+            fetchClasses();
+        } catch (err) {
+            showMessage('❌ Error saving class.', 'error');
+        }
+    };
+
+    const handleEditClass = (c) => {
+        showModal('Edit Class', `Load "${c.name}" into the form for editing?`, () => {
+            setEditingClass(c);
+            setClassForm({ name: c.name, term: c.term });
+            try { document.querySelector('.main-content').scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) {}
+        });
+    };
+
+    const handleDeleteClass = (id, name) => {
+        showModal('Delete Class', `Are you sure you want to delete "${name}"? This cannot be undone.`, async () => {
+            try {
+                await axios.delete(`${API_URL}/admin/classes/${id}`, { headers });
+                showMessage('🗑️ Class deleted.', 'warning');
+                fetchClasses();
+            } catch (err) {
+                showMessage('❌ Error deleting class.', 'error');
+            }
+        });
     };
 
     const showModal = (title, message, action) => {
@@ -154,7 +215,7 @@ const AdminDashboard = () => {
     const handleEditSubject = (s) => {
         showModal('Edit Subject', `Load "${s.name}" into the form for editing?`, () => {
             setEditingSubject(s);
-            setSubjectForm({ name: s.name, total_lessons_per_week: s.total_lessons_per_week });
+            setSubjectForm({ name: s.name, total_lessons_per_week: s.total_lessons_per_week, class_id: s.class_id || '' });
             try { document.querySelector('.main-content').scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) {}
         });
     };
@@ -223,6 +284,9 @@ const AdminDashboard = () => {
                     <button className={`btn ${activeTab === 'subjects' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('subjects')}>
                         <BookA size={16} style={{ marginRight: '0.5rem', display: 'inline' }} /> Manage Subjects
                     </button>
+                    <button className={`btn ${activeTab === 'classes' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('classes')}>
+                        <School size={16} style={{ marginRight: '0.5rem', display: 'inline' }} /> Manage Classes
+                    </button>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                     <button
@@ -286,10 +350,17 @@ const AdminDashboard = () => {
                                 <option value="admin">System Admin</option>
                             </select>
                         </div>
+                        {formData.role === 'student' && (
                         <div className="form-group">
-                            <label>Class Name (If Class Rep)</label>
-                            <input type="text" name="class_name" className="form-control" placeholder="e.g. IT Class 1" value={formData.class_name} onChange={handleUserFormChange} />
+                            <label>Assign Class (Class Rep)</label>
+                            <select name="class_name" className="form-control" value={formData.class_name} onChange={handleUserFormChange}>
+                                <option value="">-- Select a Class --</option>
+                                {classes.map(c => (
+                                    <option key={c.id} value={c.name}>{c.name} ({c.term})</option>
+                                ))}
+                            </select>
                         </div>
+                        )}
                         {editingUser && (
                             <div className="form-group" style={{ display: 'flex', alignItems: 'center' }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -412,6 +483,20 @@ const AdminDashboard = () => {
                             />
                         </div>
                         <div className="form-group">
+                            <label>Assign to Class</label>
+                            <select
+                                className="form-control"
+                                required
+                                value={subjectForm.class_id}
+                                onChange={e => setSubjectForm({ ...subjectForm, class_id: e.target.value })}
+                            >
+                                <option value="">-- Select Class --</option>
+                                {classes.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name} ({c.term})</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
                             <label>Lessons Per Week</label>
                             <input
                                 type="number"
@@ -430,7 +515,7 @@ const AdminDashboard = () => {
                             {editingSubject && (
                                 <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => {
                                     setEditingSubject(null);
-                                    setSubjectForm({ name: '', total_lessons_per_week: '' });
+                                    setSubjectForm({ name: '', total_lessons_per_week: '', class_id: '' });
                                 }}>Cancel</button>
                             )}
                         </div>
@@ -443,15 +528,21 @@ const AdminDashboard = () => {
                                 <tr>
                                     <th>ID</th>
                                     <th>Unit Name</th>
+                                    <th>Class</th>
                                     <th>Lessons / Week</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {subjects.map(s => (
+                                {subjects.slice((subjectPage - 1) * subjectsPerPage, subjectPage * subjectsPerPage).map(s => (
                                     <tr key={s.id}>
                                         <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{s.id}</td>
                                         <td style={{ fontWeight: 600 }}>{s.name}</td>
+                                        <td>
+                                            <span style={{ background: 'var(--primary-light, #e0e7ff)', color: 'var(--primary-color)', borderRadius: '4px', padding: '0.15rem 0.5rem', fontSize: '0.8rem', fontWeight: 600 }}>
+                                                {s.class_name || <span style={{ color: '#94a3b8', fontWeight: 400 }}>Unassigned</span>}
+                                            </span>
+                                        </td>
                                         <td>{s.total_lessons_per_week}</td>
                                         <td>
                                             <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -475,10 +566,146 @@ const AdminDashboard = () => {
                                         </td>
                                     </tr>
                                 ))}
-                                {subjects.length === 0 && <tr><td colSpan="4" style={{ textAlign: 'center', padding: '1.5rem' }}>No units found</td></tr>}
+                                {subjects.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center', padding: '1.5rem' }}>No units found</td></tr>}
                             </tbody>
                         </table>
                     </div>
+
+                    {Math.ceil(subjects.length / subjectsPerPage) > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1.5rem', marginBottom: '1rem' }}>
+                            <button
+                                className="btn btn-outline"
+                                disabled={subjectPage === 1}
+                                onClick={() => setSubjectPage(p => p - 1)}
+                                style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', width: 'auto', opacity: subjectPage === 1 ? 0.5 : 1 }}
+                            >
+                                <ChevronLeft size={16} /> Previous
+                            </button>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#475569' }}>
+                                Page {subjectPage} of {Math.ceil(subjects.length / subjectsPerPage)}
+                            </span>
+                            <button
+                                className="btn btn-outline"
+                                disabled={subjectPage === Math.ceil(subjects.length / subjectsPerPage)}
+                                onClick={() => setSubjectPage(p => p + 1)}
+                                style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', width: 'auto', opacity: subjectPage === Math.ceil(subjects.length / subjectsPerPage) ? 0.5 : 1 }}
+                            >
+                                Next <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'classes' && (
+                <div className="card">
+                    <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <School size={20} /> {editingClass ? 'Edit Class' : 'Add Class'}
+                    </h2>
+
+                    <form onSubmit={handleSaveClass} style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: '2rem' }}>
+                        <div className="form-group">
+                            <label>Class Name</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                required
+                                placeholder="e.g. IT Class 1"
+                                value={classForm.name}
+                                onChange={e => setClassForm({ ...classForm, name: e.target.value })}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Term</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                required
+                                placeholder="e.g. Term 1"
+                                value={classForm.term}
+                                onChange={e => setClassForm({ ...classForm, term: e.target.value })}
+                            />
+                        </div>
+                        <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem' }}>
+                            <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                                {editingClass ? 'Save Changes' : 'Add Class'}
+                            </button>
+                            {editingClass && (
+                                <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => {
+                                    setEditingClass(null);
+                                    setClassForm({ name: '', term: '' });
+                                }}>Cancel</button>
+                            )}
+                        </div>
+                    </form>
+
+                    <h3>Existing Classes</h3>
+                    <div className="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Class Name</th>
+                                    <th>Term</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {classes.slice((classPage - 1) * classesPerPage, classPage * classesPerPage).map(c => (
+                                    <tr key={c.id}>
+                                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{c.id}</td>
+                                        <td style={{ fontWeight: 600 }}>{c.name}</td>
+                                        <td>{c.term}</td>
+                                        <td>
+                                            <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                                <button
+                                                    className="btn btn-outline"
+                                                    title="Edit this class"
+                                                    style={{ padding: '0.3rem 0.7rem', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}
+                                                    onClick={() => handleEditClass(c)}
+                                                >
+                                                    <Edit size={13} /> Edit
+                                                </button>
+                                                <button
+                                                    className="btn btn-outline"
+                                                    title="Delete this class"
+                                                    style={{ padding: '0.3rem 0.7rem', borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}
+                                                    onClick={() => handleDeleteClass(c.id, c.name)}
+                                                >
+                                                    <Trash2 size={13} /> Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {classes.length === 0 && <tr><td colSpan="4" style={{ textAlign: 'center', padding: '1.5rem' }}>No classes found. Add one above.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {Math.ceil(classes.length / classesPerPage) > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1.5rem', marginBottom: '1rem' }}>
+                            <button
+                                className="btn btn-outline"
+                                disabled={classPage === 1}
+                                onClick={() => setClassPage(p => p - 1)}
+                                style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', width: 'auto', opacity: classPage === 1 ? 0.5 : 1 }}
+                            >
+                                <ChevronLeft size={16} /> Previous
+                            </button>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#475569' }}>
+                                Page {classPage} of {Math.ceil(classes.length / classesPerPage)}
+                            </span>
+                            <button
+                                className="btn btn-outline"
+                                disabled={classPage === Math.ceil(classes.length / classesPerPage)}
+                                onClick={() => setClassPage(p => p + 1)}
+                                style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', width: 'auto', opacity: classPage === Math.ceil(classes.length / classesPerPage) ? 0.5 : 1 }}
+                            >
+                                Next <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

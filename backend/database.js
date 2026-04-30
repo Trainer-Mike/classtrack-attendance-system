@@ -23,14 +23,25 @@ const db = new sqlite3.Database(dbPath, (err) => {
       db.run(`CREATE TABLE IF NOT EXISTS subjects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
-        total_lessons_per_week INTEGER
+        total_lessons_per_week INTEGER,
+        class_id INTEGER,
+        FOREIGN KEY (class_id) REFERENCES classes(id)
       )`);
+
+      // Migration: add class_id column to subjects if it doesn't exist
+      db.run(`ALTER TABLE subjects ADD COLUMN class_id INTEGER REFERENCES classes(id)`, () => {});
 
       db.run(`CREATE TABLE IF NOT EXISTS trainer_subjects (
         trainer_id INTEGER,
         subject_id INTEGER,
         FOREIGN KEY (trainer_id) REFERENCES users(id),
         FOREIGN KEY (subject_id) REFERENCES subjects(id)
+      )`);
+
+      db.run(`CREATE TABLE IF NOT EXISTS classes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        term TEXT
       )`);
 
       db.run(`CREATE TABLE IF NOT EXISTS attendance_records (
@@ -88,10 +99,20 @@ const db = new sqlite3.Database(dbPath, (err) => {
             stmt.run('Eve HOS', 'hos@test.com', hashedPwd, 'hos', null);
             stmt.finalize();
 
-            const subjectStmt = db.prepare("INSERT INTO subjects (name, total_lessons_per_week) VALUES (?, ?)");
-            subjectStmt.run('Mathematics', 5);
-            subjectStmt.run('Science', 4);
+            const classStmt = db.prepare("INSERT INTO classes (name, term) VALUES (?, ?)");
+            classStmt.run('Class A', 'Term 1');
+            classStmt.run('Class B', 'Term 1');
+            classStmt.finalize();
+
+            // Seed subjects linked to classes (class_id 1 = Class A, 2 = Class B)
+            const subjectStmt = db.prepare("INSERT INTO subjects (name, total_lessons_per_week, class_id) VALUES (?, ?, ?)");
+            subjectStmt.run('Mathematics', 5, 1);
+            subjectStmt.run('Science', 4, 1);
+            subjectStmt.run('Mathematics', 5, 2);
+            subjectStmt.run('Science', 3, 2);
             subjectStmt.finalize();
+
+
 
             // Link trainer to maths and science
             db.run("INSERT INTO trainer_subjects (trainer_id, subject_id) VALUES (2, 1)");
